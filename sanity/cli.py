@@ -496,6 +496,9 @@ def cmd_init(args):
     path, action = init_module.ensure_pre_commit(root, force=force)
     print("%s %s" % (action, os.path.relpath(path, root)))
 
+    path, action = init_module.ensure_gitignore(root)
+    print("%s %s" % (action, os.path.relpath(path, root)))
+
     if not args.skip_hooks:
         hook_args = argparse.Namespace(path=root, agent=args.agent)
         cmd_install_agent_hooks(hook_args)

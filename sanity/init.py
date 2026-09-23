@@ -28,6 +28,8 @@ PRE_COMMIT_HEADER = """\
 repos:
 """
 
+GITIGNORE_ENTRY = "# sanity judge cache (local only, safe to delete)\n.sanity/cache/\n"
+
 
 def seed_config(root, force=False):
     directory = os.path.join(root, ".sanity")
@@ -74,3 +76,24 @@ def ensure_pre_commit(root, force=False):
         handle.write("\n# --- sanity (added by sanity init) ---\n")
         handle.write(PRE_COMMIT_ENTRY)
     return path, "merged"
+
+
+def ensure_gitignore(root):
+    """`.sanity/cache/` holds judge verdicts, keyed by diff content — local
+    scratch, not something to commit. Idempotent, unlike the rest of init."""
+    path = os.path.join(root, ".gitignore")
+    if not os.path.exists(path):
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(GITIGNORE_ENTRY)
+        return path, "wrote"
+
+    with open(path, encoding="utf-8") as handle:
+        existing = handle.read()
+    if ".sanity/cache" in existing:
+        return path, "unchanged"
+
+    with open(path, "a", encoding="utf-8") as handle:
+        if existing and not existing.endswith("\n"):
+            handle.write("\n")
+        handle.write("\n" + GITIGNORE_ENTRY)
+    return path, "appended"
