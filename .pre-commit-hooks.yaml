@@ -1,0 +1,41 @@
+- id: sanity-comments
+  name: sanity — comments that restate the code
+  description: >
+    Rejects comments added by this commit that only repeat the adjacent line,
+    banner a section, or narrate the change.
+  entry: sanity comments
+  language: python
+  types: [text]
+  require_serial: false
+
+- id: sanity-rules
+  name: sanity — repository rules
+  description: >
+    Applies the rules in .sanity/rules to the lines this commit adds. Pass
+    --strict in CI so a rule that no longer parses fails loudly rather than
+    quietly ceasing to enforce.
+  entry: sanity rules
+  language: python
+  types: [text]
+  require_serial: false
+
+- id: sanity-judge
+  name: sanity — AI judge (opt-in)
+  description: >
+    Asks a model whether the commit message matches the staged diff.
+    Off until judge.enabled is true in .sanity/config.json; needs
+    judge.provider=api and an API key for commit-msg. Fails open on errors.
+  entry: sanity judge --commit
+  language: python
+  stages: [commit-msg]
+
+- id: sanity-pr
+  name: sanity — PR body against the template
+  description: >
+    Checks a PR description against the repository template. Intended for
+    manual or CI stages, not for every commit.
+  entry: sanity pr --body-file
+  language: python
+  stages: [manual]
+  pass_filenames: true
+  files: ^$

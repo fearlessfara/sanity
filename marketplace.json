@@ -1,0 +1,11 @@
+{
+  "name": "sanity",
+  "owner": { "name": "Christian Faraone" },
+  "plugins": [
+    {
+      "name": "sanity",
+      "source": "./",
+      "description": "Deterministic guardrails for AI-assisted work: filler comments, PR templates, custom rules, optional AI judge."
+    }
+  ]
+}

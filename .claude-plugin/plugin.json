@@ -1,0 +1,13 @@
+{
+  "name": "sanity",
+  "description": "Deterministic guardrails for AI-assisted work: filler comments, PR templates, custom rules, optional AI judge.",
+  "version": "0.4.0",
+  "author": {
+    "name": "Christian Faraone"
+  },
+  "homepage": "https://github.com/fearlessfara/sanity",
+  "repository": "https://github.com/fearlessfara/sanity",
+  "license": "MIT",
+  "keywords": ["hooks", "pre-commit", "ai", "lint", "pull-request"],
+  "hooks": "./hooks/hooks.json"
+}

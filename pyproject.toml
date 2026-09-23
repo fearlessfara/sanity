@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sanity-hooks"
+version = "0.4.0"
+description = "Deterministic guardrails for AI-assisted work: rules, agent hooks, pre-commit, optional AI judge."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.8"
+authors = [{ name = "Christian Faraone" }]
+keywords = ["pre-commit", "hooks", "ai", "lint", "pull-request"]
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Software Development :: Quality Assurance",
+  "Intended Audience :: Developers",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/fearlessfara/sanity"
+Repository = "https://github.com/fearlessfara/sanity"
+Issues = "https://github.com/fearlessfara/sanity/issues"
+
+[project.scripts]
+sanity = "sanity.cli:main"
+
+[tool.setuptools]
+packages = ["sanity"]
+
+[tool.setuptools.package-data]
+sanity = ["starters/*.json", "starters/rules/*.md"]

@@ -1,0 +1,38 @@
+# Copy to .github/workflows/sanity.yml in the repo you want to guard.
+name: sanity
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+jobs:
+  guardrails:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install sanity
+        run: pip install git+https://github.com/fearlessfara/sanity.git@v0.4.0
+
+      - name: PR description
+        run: sanity pr --github-event "$GITHUB_EVENT_PATH"
+
+      # --strict here and nowhere else: a rule that stopped parsing fails
+      # loudly in CI, but must never wedge someone's commit locally.
+      - name: Repository rules
+        run: |
+          files=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
+          if [ -n "$files" ]; then
+            # shellcheck disable=SC2086
+            sanity rules --strict --whole-file $files
+          fi
+
+      # Fails if CLAUDE.md / AGENTS.md / .cursor/rules no longer match .sanity/
+      - name: Instruction files in sync
+        run: sanity sync --check
