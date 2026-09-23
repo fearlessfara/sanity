@@ -1,31 +1,9 @@
 {
-  "comments": {
-    "mode": "block",
-    "ignore_paths": ["**/vendor/**", "**/*.generated.*", "**/migrations/**"],
-    "rules": {
-      "restatement": true,
-      "banner": true,
-      "boilerplate": true,
-      "narration": true,
-      "generic_verb": true
-    },
-    "restatement": { "coverage": 0.5, "max_words": 10, "verb_max_words": 6 },
-    "extra_allow_prefixes": ["PERF:", "SECURITY:"],
-    "extra_allow_patterns": ["\\bENG-\\d+\\b"],
-    "extra_deny_patterns": [
-      { "pattern": "\\bobviously\\b", "reason": "if it were obvious it would need no comment" }
-    ],
-    "extra_extensions": { ".vue": "//" },
-    "disable_extensions": []
-  },
-  "rules": {
-    "mode": "block"
-  },
   "judge": {
     "enabled": false,
     "mode": "warn",
     "when": ["commit", "pr"],
-    "provider": "session",
+    "provider": "auto",
     "api": {
       "base_url": "https://api.openai.com/v1",
       "model": "gpt-4o-mini",
@@ -35,30 +13,11 @@
     "max_diff_chars": 12000,
     "cache": true
   },
-  "pull_request": {
-    "mode": "block",
-    "template": "auto",
-    "skip_if_no_template": true,
-    "skip_draft": false,
-    "require_sections": "from_template",
-    "section_match": "exact",
-    "require_non_empty_sections": true,
-    "min_section_words": 3,
-    "require_checklist_items": "present",
-    "forbid_template_comments": true,
-    "forbid_any_html_comment": false,
-    "min_body_words": 0,
-    "require_ticket": {
-      "enabled": false,
-      "pattern": "\\b([A-Z][A-Z0-9]+-\\d+|#\\d+)\\b",
-      "search": ["title", "body"],
-      "message": "Reference the Linear ticket, e.g. ENG-123."
-    },
-    "title": {
-      "enabled": false,
-      "pattern": "^(feat|fix|chore|docs|refactor|perf|test|build|ci)(\\(.+\\))?!?: .{10,}",
-      "message": "Use Conventional Commits."
-    },
-    "extra_forbidden_patterns": []
+  "sync": {
+    "targets": {
+      "claude": "CLAUDE.md",
+      "codex": "AGENTS.md",
+      "cursor": ".cursor/rules/sanity.mdc"
+    }
   }
 }

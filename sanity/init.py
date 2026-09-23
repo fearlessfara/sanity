@@ -2,10 +2,9 @@
 
     sanity init
 
-Creates `.sanity/` with a starter config and warn-mode custom rules, installs
-agent hooks that cancel sloppy tool calls, compiles instruction files, and
-writes a `.pre-commit-config.yaml` pinned to the published sanity repo.
-Nothing is overwritten unless `--force` is passed.
+Creates `.sanity/` with a starter config and a natural-language starter rule,
+installs agent stop hooks, compiles instruction files, and writes a
+`.pre-commit-config.yaml` pinned to the published sanity repo.
 """
 
 import os
@@ -13,16 +12,13 @@ import shutil
 
 STARTERS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "starters")
 
-# Pin to the public repo so `pre-commit install` actually installs sanity —
-# `language: system` only works if the user already pip-installed the CLI.
 PRE_COMMIT_ENTRY = """\
   - repo: https://github.com/fearlessfara/sanity
-    rev: v0.4.1
+    rev: v0.6.0
     hooks:
-      - id: sanity-comments
-      - id: sanity-rules
-      # Optional AI judge (commit-msg). Needs judge.enabled=true and
-      # judge.provider=api plus an API key.
+      - id: sanity-judge-rules
+      # Optional: does the commit message match the staged diff?
+      # Needs judge.enabled=true as well.
       # - id: sanity-judge
 """
 
@@ -44,7 +40,6 @@ def seed_config(root, force=False):
 
 
 def seed_rules(root, force=False):
-    """Copy starter rule files that are not already present."""
     source_dir = os.path.join(STARTERS, "rules")
     target_dir = os.path.join(root, ".sanity", "rules")
     os.makedirs(target_dir, exist_ok=True)
@@ -62,7 +57,6 @@ def seed_rules(root, force=False):
 
 
 def ensure_pre_commit(root, force=False):
-    """Write or merge sanity hooks into `.pre-commit-config.yaml`."""
     path = os.path.join(root, ".pre-commit-config.yaml")
     if not os.path.exists(path):
         with open(path, "w", encoding="utf-8") as handle:
@@ -71,7 +65,7 @@ def ensure_pre_commit(root, force=False):
 
     with open(path, encoding="utf-8") as handle:
         existing = handle.read()
-    if "fearlessfara/sanity" in existing or "id: sanity-comments" in existing:
+    if "fearlessfara/sanity" in existing or "id: sanity-judge-rules" in existing:
         return path, "unchanged"
 
     with open(path, "a", encoding="utf-8") as handle:

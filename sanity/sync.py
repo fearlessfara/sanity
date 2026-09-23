@@ -24,12 +24,12 @@ BEGIN = "<!-- sanity:begin -->"
 END = "<!-- sanity:end -->"
 
 PREAMBLE = (
-    "These rules are enforced by `sanity`. A violation cancels the tool call "
-    "(or fails the commit) and hands the reason back — so follow them on the "
-    "first try. Do not invent filler comments, narrate edits, skip the PR "
-    "template, or ignore a rule below because it is inconvenient. Do not "
-    "edit this section by hand; it is generated from `.sanity/` and "
-    "`sanity sync` will overwrite it."
+    "These rules are enforced by `sanity` with an AI judge. On an agent "
+    "turn the stop hook hands a violation back so you can fix it before "
+    "stopping. On commit and in CI a blocking rule can fail the change. "
+    "Do not ignore a rule below because it is inconvenient. Do not edit "
+    "this section by hand; it is generated from `.sanity/` and `sanity "
+    "sync` will overwrite it."
 )
 
 MDC_HEADER = (

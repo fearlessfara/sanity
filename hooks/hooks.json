@@ -2,15 +2,16 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
-        "hooks": [
-          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/comments.py --agent claude" }
-        ]
-      },
-      {
         "matcher": "Bash|mcp__.*__(create|update)_(pull|merge)_request",
         "hooks": [
           { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/pr.py --agent claude" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/judge.py --agent claude" }
         ]
       }
     ]

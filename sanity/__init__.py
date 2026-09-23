@@ -1,3 +1,3 @@
 """sanity — deterministic guardrails for AI-assisted commits."""
 
-__version__ = "0.3.0"
+__version__ = "0.6.0"

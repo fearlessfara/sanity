@@ -1,26 +1,14 @@
-"""Inline escapes for false positives.
+"""Inline escapes for false positives on named NL rules.
 
-Put a directive in a comment in the source language:
+In a PR body (or any text graded by the judge):
 
-    // sanity-skip-next-line
-    console.log("debug")
-
-    print("x")  # sanity-skip: no-debug-print
-
-    # sanity-skip-file: no-debug-print
-
-    <!-- sanity-skip: no-ai-attribution -->
+    <!-- sanity-skip-file: smallest-change -->
+    <!-- sanity-skip-file -->
 
 Forms:
 
-  sanity-skip                 this line, every check
-  sanity-skip: id[,id…]       this line, named rule(s) only
-  sanity-skip-next-line       next line (same as above)
-  sanity-skip-next-line: id
-  sanity-skip-file            whole file, every check
-  sanity-skip-file: id[,id…]  whole file, named rule(s)
-
-Built-in comment detection is addressed as id `comments`.
+  sanity-skip-file            whole change, every rule
+  sanity-skip-file: id[,id…]  whole change, named rule(s)
 """
 
 import re

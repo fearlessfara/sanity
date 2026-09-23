@@ -5,7 +5,7 @@
     {
       "name": "sanity",
       "source": "./",
-      "description": "Stop AI slop. Cancels filler comments, off-template PRs, and custom rule breaks so the agent has to fix them."
+      "description": "Stop AI slop. Natural-language rules enforced by an AI judge so the agent has to fix them."
     }
   ]
 }

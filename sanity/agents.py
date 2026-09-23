@@ -1,17 +1,4 @@
-"""Which agent is on the other end of the pipe.
-
-Claude Code, Cursor and Codex all run command hooks the same way — one JSON
-object on stdin, exit 2 to block — and all three disagree about field names,
-tool names, and the shape of a structured refusal. Each adapter exposes the
-same three functions, so the checks never learn which agent they serve:
-
-    edits(payload)         -> [(path, new_lines, added_indices)]
-    pull_request(payload)  -> (kind, title, body, flags) or None
-    refuse(message)        -> exit code, having written the refusal
-
-The generated manifests pass `--agent` explicitly. Detection only matters for
-hand-rolled setups, and falls back to Claude, which is what shipped first.
-"""
+"""Adapter dispatch for Claude / Cursor / Codex hook payloads."""
 
 from . import claude, codex, cursor
 

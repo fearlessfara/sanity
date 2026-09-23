@@ -1,13 +1,13 @@
 {
   "name": "sanity",
-  "description": "Stop AI slop. Cancels filler comments, off-template PRs, and custom rule breaks so the agent has to fix them.",
-  "version": "0.4.1",
+  "description": "Stop AI slop. Natural-language rules enforced by an AI judge via agent stop hooks, pre-commit, and CI.",
+  "version": "0.6.0",
   "author": {
     "name": "Christian Faraone"
   },
   "homepage": "https://github.com/fearlessfara/sanity",
   "repository": "https://github.com/fearlessfara/sanity",
   "license": "MIT",
-  "keywords": ["hooks", "pre-commit", "ai", "slop", "lint", "pull-request"],
+  "keywords": ["hooks", "pre-commit", "ai", "slop", "pull-request"],
   "hooks": "./hooks/hooks.json"
 }

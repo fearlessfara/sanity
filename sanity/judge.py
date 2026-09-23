@@ -1,17 +1,19 @@
-"""Optional AI check: does the commit / PR description match the diff?
+"""Natural-language and description judges.
 
-Mechanical rules catch structure. This catches truth — a filled-in PR about
-the wrong change, a commit message that says "fix typo" over a schema
-migration. It is off by default, warn-only when enabled, and fails open on
-timeouts, missing keys, or unreadable replies — the same philosophy as a
-broken config never wedging a commit.
+Two layers:
 
-Providers:
+1. Built-in match (`judge.enabled`) — does the commit/PR text match the diff?
+2. Per-rule `check: "judge"` — does the change respect *your* NL rule prose?
 
-  session  Hand the criterion back to the agent that is already running
-           (hook path). Costs nothing. Useless for a bare `git commit`.
-  api      Call an OpenAI-compatible chat endpoint. Needed for pre-commit
-           and CI. Requires an API key in the configured env var.
+Both use the same providers:
+
+  session  Inject the criterion into the live agent turn (fast whip, free).
+  api      OpenAI-compatible chat call (pre-commit / CI).
+  auto     session when an agent adapter is present, else api.
+
+Fail open on missing keys, timeouts, or unreadable replies — a flaky model
+must never wedge a commit unless the user asked for block mode *and* got a
+real verdict.
 """
 
 import hashlib
@@ -21,7 +23,7 @@ import re
 import urllib.error
 import urllib.request
 
-from . import gitinfo
+from . import gitinfo, rules as rules_module, skip as skip_module
 
 CACHE_DIR = os.path.join(".sanity", "cache", "judge")
 
@@ -67,12 +69,47 @@ Diff summary:
 ---
 """
 
+RULE_PROMPT = """\
+You are verifying whether a code change respects a repository rule written
+in natural language. Be strict: if the change clearly violates the rule,
+fail it. If the change is unrelated to the rule, pass it.
+
+Reply with JSON only, no markdown fences:
+{{"pass": true|false, "reason": "one short sentence"}}
+
+Rule id: {rule_id}
+
+Rule (the standard to grade against):
+---
+{criterion}
+---
+
+Change under review:
+---
+{context}
+---
+"""
+
 SESSION_HINT = """\
 sanity judge ({kind}): review the following against the repository's rules
 and the actual change. If it misrepresents the diff, rewrite it before
 continuing.
 
 {payload}
+"""
+
+SESSION_RULES = """\
+sanity: review your change against these natural-language rules before
+stopping. If any rule is violated, fix the change now. Do not argue with
+the criterion — rewrite the work. If every rule is already satisfied,
+stop.
+
+{rules}
+
+Change under review:
+---
+{context}
+---
 """
 
 
@@ -82,11 +119,18 @@ def settings(config):
         "enabled": bool(section.get("enabled")),
         "mode": str(section.get("mode") or "warn").lower(),
         "when": list(section.get("when") or ["commit", "pr"]),
-        "provider": str(section.get("provider") or "session").lower(),
+        "provider": str(section.get("provider") or "auto").lower(),
         "api": dict(section.get("api") or {}),
         "max_diff_chars": int(section.get("max_diff_chars") or 12000),
         "cache": section.get("cache", True),
     }
+
+
+def resolve_provider(config, for_agent=False):
+    provider = settings(config)["provider"]
+    if provider == "auto":
+        return "session" if for_agent else "api"
+    return provider
 
 
 def active(config, kind):
@@ -98,20 +142,46 @@ def active(config, kind):
     )
 
 
-def diff_summary(max_chars=12000, root=None):
-    """A bounded summary of the staged change for the judge prompt."""
+def diff_summary(max_chars=12000, root=None, worktree=False):
+    """A bounded summary of the change for the judge prompt.
+
+    `worktree=False` (default): staged only — right for pre-commit / commit-msg.
+    `worktree=True`: `git diff HEAD` — staged + unstaged, for agent stop hooks
+    where the model often has not staged yet.
+    """
     cwd = root or os.getcwd()
-    stat = gitinfo.run_in(cwd, ["git", "diff", "--cached", "--stat"]) or ""
-    names = gitinfo.run_in(
-        cwd, ["git", "diff", "--cached", "--name-status"]
-    ) or ""
-    patch = gitinfo.run_in(
-        cwd, ["git", "diff", "--cached", "--no-color", "-U1"]
-    ) or ""
+    if worktree:
+        args_stat = ["git", "diff", "HEAD", "--stat"]
+        args_names = ["git", "diff", "HEAD", "--name-status"]
+        args_patch = ["git", "diff", "HEAD", "--no-color", "-U1"]
+        empty = "(no working-tree changes)"
+    else:
+        args_stat = ["git", "diff", "--cached", "--stat"]
+        args_names = ["git", "diff", "--cached", "--name-status"]
+        args_patch = ["git", "diff", "--cached", "--no-color", "-U1"]
+        empty = "(no staged changes)"
+    stat = gitinfo.run_in(cwd, args_stat) or ""
+    names = gitinfo.run_in(cwd, args_names) or ""
+    patch = gitinfo.run_in(cwd, args_patch) or ""
     body = "\n".join(part for part in (stat, names, patch) if part).strip()
     if len(body) > max_chars:
         body = body[:max_chars] + "\n… [truncated by sanity judge]"
-    return body or "(no staged changes)"
+    return body or empty
+
+
+def _context(opts, root, title=None, body=None, message=None, diff=None,
+             worktree=False):
+    diff = diff if diff is not None else diff_summary(
+        opts["max_diff_chars"], root=root, worktree=worktree
+    )
+    parts = []
+    if title or body:
+        parts.append("PR title: %s" % (title or ""))
+        parts.append("PR body:\n%s" % (body or ""))
+    if message:
+        parts.append("Commit message:\n%s" % message)
+    parts.append("Diff:\n%s" % diff)
+    return "\n\n".join(parts), diff
 
 
 def _parse_verdict(text):
@@ -158,8 +228,7 @@ def _cache_put(root, key, passed, reason, enabled):
         pass
 
 
-def _api_chat(api, prompt):
-    """Call an OpenAI-compatible /chat/completions endpoint. None on failure."""
+def _api_chat(api, prompt, system=None):
     key_env = api.get("api_key_env") or "OPENAI_API_KEY"
     api_key = os.environ.get(key_env) or api.get("api_key")
     if not api_key:
@@ -172,8 +241,9 @@ def _api_chat(api, prompt):
         "model": model,
         "temperature": 0,
         "messages": [
-            {"role": "system",
-             "content": "You judge commit and PR descriptions. JSON only."},
+            {"role": "system", "content": system or (
+                "You enforce repository rules. Reply with JSON only."
+            )},
             {"role": "user", "content": prompt},
         ],
         "response_format": {"type": "json_object"},
@@ -204,7 +274,6 @@ def _api_chat(api, prompt):
 
 
 def session_message(kind, **fields):
-    """Text to inject into an agent turn. Never blocks by itself."""
     if kind == "commit":
         payload = "Commit message:\n%s\n\nDiff:\n%s" % (
             fields.get("message") or "", fields.get("diff") or "",
@@ -219,22 +288,19 @@ def session_message(kind, **fields):
 
 
 def evaluate(config, kind, root=None, message=None, title=None, body=None,
-             diff=None):
-    """(passed, reason, channel).
-
-    channel is "ok", "skip", "session", "warn", or "error".
-    passed is True when the change is fine or when we fail open.
-    """
+             diff=None, for_agent=False):
+    """Built-in commit/PR match. (passed, reason, channel)."""
     opts = settings(config)
     if not active(config, kind):
         return True, "", "skip"
 
     root = root or os.getcwd()
-    diff = diff if diff is not None else diff_summary(
-        opts["max_diff_chars"], root=root
+    context, diff = _context(
+        opts, root, title=title, body=body, message=message, diff=diff
     )
+    provider = resolve_provider(config, for_agent=for_agent)
 
-    if opts["provider"] == "session":
+    if provider == "session":
         return True, session_message(
             kind, message=message, title=title, body=body, diff=diff
         ), "session"
@@ -264,6 +330,133 @@ def evaluate(config, kind, root=None, message=None, title=None, body=None,
     passed, reason = parsed
     _cache_put(root, cache_key, passed, reason, opts["cache"])
     return passed, reason, "ok"
+
+
+def _select_rules(ruleset, surface):
+    judged = list(ruleset.judged()) if ruleset else []
+    if surface == "pull_request":
+        return [r for r in judged if r.surface == "pull_request"]
+    # change / commit / files / stop: grade change-scoped rules
+    return [
+        r for r in judged
+        if r.surface in ("files", "change", "pull_request")
+        or (surface == "change" and r.surface == "files")
+    ]
+
+
+def _api_key_present(api):
+    key_env = (api or {}).get("api_key_env") or "OPENAI_API_KEY"
+    return bool(os.environ.get(key_env) or (api or {}).get("api_key"))
+
+
+def resolve_rules_provider(config, for_agent=False):
+    """Provider for check:\"judge\" rules.
+
+    `auto` prefers a real API grade when a key is present (strong stop loop),
+    otherwise falls back to a one-shot session self-review inside an agent.
+    """
+    provider = settings(config)["provider"]
+    if provider != "auto":
+        return provider
+    if _api_key_present(settings(config)["api"]):
+        return "api"
+    return "session" if for_agent else "api"
+
+
+def evaluate_rules(config, ruleset, surface="change", root=None,
+                   title=None, body=None, message=None, diff=None,
+                   for_agent=False, worktree=False):
+    """Grade every check:\"judge\" rule.
+
+    Returns (results, advice_or_report, blocking).
+
+    results: [(rule, passed, reason, channel)]
+    """
+    opts = settings(config)
+    root = root or os.getcwd()
+    selected = _select_rules(ruleset, surface)
+    if not selected:
+        return [], "", False
+
+    # File-level skips in the PR body suppress named judge rules.
+    body_skips = skip_module.collect_text(body or "")
+    selected = [r for r in selected if not body_skips.covers(r.id)]
+    if not selected:
+        return [], "", False
+
+    context, diff = _context(
+        opts, root, title=title, body=body, message=message, diff=diff,
+        worktree=worktree,
+    )
+    # Nothing to grade — do not poke the agent into another turn.
+    if diff.startswith("(no ") and not (title or body or message):
+        return [], "", False
+
+    provider = resolve_rules_provider(config, for_agent=for_agent)
+
+    if provider == "session":
+        blocks = []
+        for rule in selected:
+            blocks.append("### %s\n%s" % (rule.id, rule.grading_criterion()))
+        advice = SESSION_RULES.format(
+            rules="\n\n".join(blocks), context=context
+        )
+        results = [(rule, True, "", "session") for rule in selected]
+        # Session cannot hard-fail; the agent is told to self-review once.
+        return results, advice, False
+
+    results = []
+    blocking = False
+    for rule in selected:
+        cache_key = "rule\0%s\0%s\0%s" % (
+            rule.id, rule.grading_criterion(), context
+        )
+        cached = _cache_get(root, cache_key, opts["cache"])
+        if cached is not None:
+            passed, reason = cached
+            channel = "ok"
+        else:
+            prompt = RULE_PROMPT.format(
+                rule_id=rule.id,
+                criterion=rule.grading_criterion(),
+                context=context,
+            )
+            text, error = _api_chat(opts["api"], prompt)
+            if error:
+                passed, reason, channel = True, error, "error"
+            else:
+                parsed = _parse_verdict(text)
+                if parsed is None:
+                    passed, reason, channel = (
+                        True, "unparseable judge reply", "error"
+                    )
+                else:
+                    passed, reason = parsed
+                    channel = "ok"
+                    _cache_put(
+                        root, cache_key, passed, reason, opts["cache"]
+                    )
+
+        results.append((rule, passed, reason, channel))
+        if not passed and channel == "ok" and rule.severity == "block":
+            blocking = True
+
+    report = rules_module.report_judge([
+        (rule, passed, reason, channel, rule.severity)
+        for rule, passed, reason, channel in results
+    ])
+    # Also surface soft errors so operators see fail-open skips.
+    errors = [
+        "sanity judge (%s): skipped — %s" % (rule.id, reason)
+        for rule, passed, reason, channel in results
+        if channel == "error"
+    ]
+    if errors and not report:
+        report = "\n".join(errors)
+    elif errors:
+        report = report + "\n\n" + "\n".join(errors)
+
+    return results, report, blocking
 
 
 def report(kind, passed, reason, channel, mode="warn"):

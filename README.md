@@ -1,108 +1,97 @@
 # sanity
 
-**Stop AI slop. Force the agent to follow your rules.**
+**Stop AI slop. Force the agent to follow your rules — the ones a linter cannot express.**
 
-Models will narrate the edit, invent filler comments, skip your PR template,
-and ignore `CLAUDE.md` when it is inconvenient. Sanity exists to whip that
-behaviour back into line.
+Regex and style belong in eslint / ruff / biome. Sanity is for taste and
+judgment: scope the diff, don't invent APIs, be honest in the PR body, prefer
+the smallest change that works.
 
-You write rules once in `.sanity/`. Sanity enforces them mechanically in
-Claude Code, Cursor, and Codex (deny the tool call), in pre-commit (block the
-commit), and in CI — and can optionally ask a model whether a commit or PR
-actually matches the diff.
+You write those rules once in `.sanity/`. Sanity grades the change with an AI
+judge at the end of an agent turn (and again in pre-commit / CI), then hands
+the reason back so the model has to fix it before it can stop.
 
 `CLAUDE.md` / `AGENTS.md` / `.cursor/rules` are persuasion. Sanity is not:
-the edit is cancelled, or the commit fails, and the reason is handed back so
-the agent has to fix it.
+a stop hook hands the rules back into the turn, and pre-commit / CI can fail
+the commit.
 
-| Check | What it rejects |
+| Command | What it does |
 | --- | --- |
-| `sanity comments` | Comments that only restate the code, banner a section, or narrate the edit |
-| `sanity pr` | PR/MR descriptions that ignore the repository template |
-| `sanity rules` | Whatever you put in `.sanity/rules/` |
-| `sanity judge` | *(opt-in)* Commit/PR text that does not match the staged diff |
+| `sanity new` | Interactive rule author |
+| `sanity judge --rules` | Grade every natural-language rule against the change |
+| `sanity sync` | Compile rules into the instruction files agents actually read |
 
-Python 3.8+, **stdlib only**, no network required for the mechanical checks.
+Python 3.8+, **stdlib only**. Needs an API key for pre-commit / CI (or a live
+agent session for the stop-hook self-review).
 
 ---
 
 ## Install
 
-### Quick start (recommended)
+Same shape as pre-commit: install the tool once, then add it to the repo.
 
 ```bash
 pip install git+https://github.com/fearlessfara/sanity.git
 cd your-repo
 sanity init
+```
+
+`sanity init` writes the files you commit:
+
+| File | Same idea as |
+| --- | --- |
+| `.sanity/rules/` | the rules themselves |
+| `.cursor/hooks.json` | a Cursor project hook |
+| `.codex/hooks.json` | a Codex hook |
+| `.pre-commit-config.yaml` | a pre-commit repo entry |
+| `CLAUDE.md`, `AGENTS.md`, `.cursor/rules` | instruction files (`sanity sync`) |
+
+The hook scripts call `sanity` on `PATH`. They do not embed your machine's
+paths. Open **this repo** as the Cursor project — hooks in a parent folder
+are not loaded.
+
+With no API key, a Cursor or Codex stop hook sends one self-review back into
+the turn, then lets it stop. If a key is set, the API judge can send the
+agent back until `loop_count` reaches 3 (`loop_limit: 3` on the Cursor stop
+hook). Codex still asks you to trust hooks: run `/hooks` in the CLI.
+
+Git and CI are the pre-commit path. Once per clone:
+
+```bash
 pre-commit install
 ```
 
-`sanity init` will:
-
-1. Create `.sanity/` with a starter config and warn-mode rules  
-2. Write / merge `.pre-commit-config.yaml`  
-3. Install Cursor + Codex agent hooks  
-4. Run `sanity sync` → update `CLAUDE.md`, `AGENTS.md`, `.cursor/rules`
-
-Then commit those files so the whole team gets the same gates.
-
-If you enable the optional AI judge later:
-
-```bash
-pre-commit install --hook-type commit-msg
-```
-
-### pre-commit only
+That gate needs `OPENAI_API_KEY` (or the env name in your config). With no
+key it skips, the same way a flaky model must not wedge a commit.
 
 ```yaml
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/fearlessfara/sanity
-    rev: v0.4.1   # pin a tag
+    rev: v0.6.0
     hooks:
-      - id: sanity-comments
-      - id: sanity-rules
-      # - id: sanity-judge   # commit-msg stage; needs judge.enabled + api
+      - id: sanity-judge-rules
 ```
 
-```bash
-pre-commit install
-```
+### Claude Code
 
-### Plain git hook (no pre-commit framework)
-
-```bash
-pip install git+https://github.com/fearlessfara/sanity.git
-sanity install-git-hook
-```
-
-### Claude Code plugin
+Use the plugin. It ships its own hooks via `${CLAUDE_PLUGIN_ROOT}`, so you
+do not copy scripts into the repo.
 
 ```text
 /plugin marketplace add fearlessfara/sanity
 /plugin install sanity@sanity
 ```
 
-### Cursor & Codex
-
-Handled by `sanity init`, or:
-
-```bash
-sanity install-agent-hooks          # both
-sanity install-agent-hooks --agent cursor
-```
-
-Codex will not run hooks until you trust them — run `/hooks` in the Codex CLI.
+Still run `sanity init` in the repo so `.sanity/rules/` exists. Pass
+`--skip-hooks` if you do not want the Cursor and Codex files.
 
 ### CI
 
-Copy [`examples/github-actions.yml`](examples/github-actions.yml) into your
-app repo, or:
+Copy [`examples/github-actions.yml`](examples/github-actions.yml), or:
 
 ```yaml
 - run: pip install git+https://github.com/fearlessfara/sanity.git
-- run: sanity pr --github-event "$GITHUB_EVENT_PATH"
-- run: sanity rules --strict $(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+- run: git reset --soft origin/${{ github.base_ref }} && sanity judge --rules
 - run: sanity sync --check
 ```
 
@@ -111,51 +100,56 @@ app repo, or:
 ## How it fits together
 
 ```
-.sanity/rules/*.md     ← your rules (prose for the model + a mechanical check)
+.sanity/rules/*.md     ← natural-language rules (prose = grading criterion)
         │
-        ├─ sanity sync      → stuff them into CLAUDE.md / AGENTS.md / .cursor
-        ├─ agent hooks      → deny the sloppy tool call mid-turn
-        ├─ pre-commit       → block the commit if it still slipped through
-        └─ CI + optional judge → unskippable backstop
+        ├─ sanity sync         → CLAUDE.md / AGENTS.md / .cursor
+        ├─ agent stop hooks    → one self-review, then the turn may stop
+        ├─ pre-commit          → sanity judge --rules
+        └─ CI                  → same judge; fails open without a key
 ```
-
-The agent hook is the whip that matters most: the model gets the refusal in
-the same turn and has to rewrite. Pre-commit catches humans and any editor.
-CI is what `--no-verify` cannot dodge.
 
 ---
 
-## Your own rules
+## Writing rules
 
-One Markdown file per rule under `.sanity/rules/`:
+```bash
+sanity new
+```
+
+Or by hand — one Markdown file per rule under `.sanity/rules/`:
 
 ````markdown
-# No `console.log` in shipped code
+# Prefer the smallest change that works
 
-Use the `logger` module. Structured output can be filtered by level and
-correlated by request id; a bare `console.log` cannot.
+When fixing or implementing something, touch only what the task requires.
+Do not rename nearby symbols, reformat untouched files, or "improve"
+unrelated code unless the user asked for it.
 
 ```sanity
 {
-  "paths": ["src/**/*.ts", "src/**/*.tsx"],
-  "deny": "\\bconsole\\.log\\s*\\(",
-  "severity": "block",
-  "message": "use logger.debug() instead"
+  "check": "judge",
+  "surface": "change",
+  "severity": "warn"
 }
 ```
 ````
 
 | Key | Meaning |
 | --- | --- |
-| `paths` | Globs (`**` spans directories, `*` stops at one) |
-| `deny` / `require` | Exactly one. `deny` = added lines; `require` = whole file |
+| `check` | Always `"judge"` |
+| `criterion` | Optional override of the prose used as the grading standard |
 | `severity` | `block` / `warn` / `off` |
-| `surface` | `files` (default) or `pull_request` |
-| `message` | Shown when it fires |
+| `surface` | `change` (default), `files`, or `pull_request` |
+| `paths` | Optional globs to limit what the judge sees |
+| `message` | Short note when it fires |
 
-Prose is for the model. The fenced block is what gets enforced. Anything you
-cannot express as `deny`/`require` belongs in `.sanity/guidance/` (compiled
-into instruction files, never blocked).
+Non-interactive:
+
+```bash
+sanity new --title "Prefer the smallest change that works" \
+  --body "Touch only what the task requires." \
+  --severity warn -y
+```
 
 After editing rules:
 
@@ -164,64 +158,28 @@ sanity sync          # rewrite instruction files
 sanity sync --check  # CI: fail if they drifted
 ```
 
-Starter rules (warn mode) ship with `sanity init`. More examples live in
-[`examples/rules/`](examples/rules/).
-
 ---
 
-## Built-in checks
+## The judge loop
 
-### Comments
-
-Only lines **this change added** — a pre-existing filler comment never blocks
-a later commit.
-
-Catches: restatement (`// increment the counter`), banners, narration
-(`// Added a retry wrapper`), generic labels (`# Constants`).
-
-Leaves alone: `WHY:` notes, `TODO`/`FIXME`, doc comments, linter directives,
-license headers, comments with real reasoning.
-
-Languages: JS/TS, Python, Go, Rust, Java, Kotlin, Swift, Scala, C#, C/C++,
-PHP, Ruby, shell. Unknown extensions are skipped.
-
-### Pull requests
-
-Auto-finds `.github/pull_request_template.md` (and GitLab / common variants).
-
-Requires every template section present and non-empty, guidance HTML comments
-removed, checklist items kept, no `[describe]` / `TBD` placeholders. Refuses
-`gh pr create --fill`.
-
-This validates **structure**, not truth. For “does the body match the diff?”,
-enable the judge.
-
----
-
-## Optional AI judge
-
-Off by default. Warn-only when enabled. Fails open on missing keys, timeouts,
-or bad replies — a flaky model must never wedge a commit unless you ask it to.
-
-```json
-{
-  "judge": {
-    "enabled": true,
-    "mode": "warn",
-    "when": ["commit", "pr"],
-    "provider": "api",
-    "api": {
-      "model": "gpt-4o-mini",
-      "api_key_env": "OPENAI_API_KEY"
-    }
-  }
-}
-```
+1. You write a rule in `.sanity/rules/`  
+2. The agent finishes a turn → stop hook grades the working-tree change  
+3. On failure (or session self-review): the agent is told to keep going  
+4. The loop is capped the way Cursor caps `stop` (`loop_limit`, `loop_count`)  
+5. Pre-commit / CI run `sanity judge --rules` against the staged diff  
 
 | Provider | Where | Needs |
 | --- | --- | --- |
-| `session` | Agent hooks — injects the criterion into the current turn | Nothing |
-| `api` | `commit-msg` / CI / `sanity judge` | OpenAI-compatible API key |
+| `auto` (default) | API when a key is present, else session inside an agent | API key *or* live agent |
+| `session` | Agent stop / PR hooks — one-shot self-review | Nothing |
+| `api` | pre-commit / CI / stop with a key | OpenAI-compatible API key |
+
+Fails open on missing keys, timeouts, or unreadable replies.
+
+### Optional: commit / PR vs diff
+
+Separately, ask whether the commit message or PR body honestly describes the
+change (`judge.enabled: true`):
 
 ```bash
 sanity judge --commit --message-file .git/COMMIT_EDITMSG
@@ -230,38 +188,18 @@ sanity judge --pr --body-file pr.md
 
 ---
 
-## Skipping false positives
+## Skipping a rule
 
-Put a directive in a normal comment (any supported language):
-
-```ts
-// sanity-skip-next-line
-console.log("intentional probe");
-
-counter += 1; // sanity-skip: comments
-
-// sanity-skip-file: no-debug-print
-```
-
-```python
-print("x")  # sanity-skip: no-debug-print
-```
+In a PR body (or any text the judge sees):
 
 ```markdown
-<!-- sanity-skip-file: no-ai-attribution -->
+<!-- sanity-skip-file: smallest-change -->
 ```
 
 | Directive | Effect |
 | --- | --- |
-| `sanity-skip` | This line, every check |
-| `sanity-skip: id[,id…]` | This line, named rule(s) only |
-| `sanity-skip-next-line` | Next line (same) |
-| `sanity-skip-next-line: id` | Next line, named rule(s) |
-| `sanity-skip-file` | Whole file, every check |
-| `sanity-skip-file: id` | Whole file, named rule(s) |
-
-The built-in filler-comment check is named `comments`. Prefer a named skip
-over a file-wide one so the rest of the file stays guarded.
+| `sanity-skip-file: id` | Suppress a named NL rule for this change |
+| `sanity-skip-file` | Suppress every NL rule |
 
 ---
 
@@ -271,24 +209,12 @@ over a file-wide one so the rest of the file stays guarded.
 
 1. Built-in defaults  
 2. `~/.sanity.json` or `~/.claude/sanity.json`  
-3. `<repo>/.sanity/config.json` or `<repo>/.sanity.json`  
-4. Env: `SANITY_MODE`, `SANITY_COMMENTS_MODE`, `SANITY_PR_MODE`,
-   `SANITY_RULES_MODE`, `SANITY_JUDGE_*`
+3. `<repo>/.sanity/config.json`  
+4. Env: `SANITY_MODE`, `SANITY_JUDGE_*`
 
 ```bash
-sanity config    # print what is actually in effect
+sanity config
 ```
-
-Modes per check: `block` (default), `warn`, `off`.
-
-Before flipping a check to `block` on a mature repo:
-
-```bash
-sanity comments --whole-file $(git ls-files '*.ts')
-sanity pr --body-file some-recent-pr.md
-```
-
-If real history fails, loosen the rules — don’t blame the team.
 
 ---
 
@@ -296,15 +222,14 @@ If real history fails, loosen the rules — don’t blame the team.
 
 ```text
 sanity init                     scaffold .sanity/, hooks, pre-commit, sync
-sanity comments [FILES...]      filler-comment check
-sanity rules [FILES...]         apply .sanity/rules
-sanity pr [--body-file F]       PR template check
+sanity new                      create a natural-language rule
+sanity judge --rules            grade NL rules against the change
 sanity judge --commit|--pr      optional AI match check
 sanity sync [--check]           compile rules → instruction files
-sanity install-agent-hooks      Cursor / Codex manifests
+sanity install-agent-hooks      Cursor / Codex stop + PR hooks
 sanity install-git-hook         plain .git/hooks/pre-commit
 sanity config                   show resolved config + loaded rules
-sanity hook files|pr            agent hook entry (JSON on stdin)
+sanity hook stop|pr             agent hook entry (JSON on stdin)
 ```
 
 ---
@@ -317,8 +242,6 @@ cd sanity
 pip install -e .
 python3 -m unittest discover -s tests
 ```
-
-144 tests, no dependencies, no network.
 
 ---
 

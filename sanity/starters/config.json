@@ -1,12 +1,9 @@
 {
-  "comments": { "mode": "block" },
-  "pull_request": { "mode": "block" },
-  "rules": { "mode": "block" },
   "judge": {
     "enabled": false,
     "mode": "warn",
     "when": ["commit", "pr"],
-    "provider": "session",
+    "provider": "auto",
     "api": {
       "base_url": "https://api.openai.com/v1",
       "model": "gpt-4o-mini",
