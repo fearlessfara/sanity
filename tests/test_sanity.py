@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 
 from sanity import agents, claude, codex, cursor, rules, sync  # noqa: E402
 from sanity import comments, config as config_module, init as init_module  # noqa: E402
-from sanity import judge as judge_module  # noqa: E402
+from sanity import judge as judge_module, skip as skip_module  # noqa: E402
 from sanity.pr import PRChecker, parse_command  # noqa: E402
 
 TEMPLATE = """## Summary
@@ -527,6 +527,105 @@ class Splicing(unittest.TestCase):
 
     def test_empty_file(self):
         self.assertTrue(sync.splice("", "BLOCK\n").startswith(sync.BEGIN))
+
+
+class SkipDirectives(unittest.TestCase):
+    def test_parse_same_line(self):
+        self.assertEqual(
+            skip_module.parse_line("print(1)  # sanity-skip"),
+            ("line", frozenset({"*"})),
+        )
+
+    def test_parse_named_rule(self):
+        scope, ids = skip_module.parse_line("// sanity-skip: no-console-log")
+        self.assertEqual(scope, "line")
+        self.assertEqual(ids, frozenset({"no-console-log"}))
+
+    def test_parse_next_line(self):
+        self.assertEqual(
+            skip_module.parse_line("# sanity-skip-next-line"),
+            ("next", frozenset({"*"})),
+        )
+
+    def test_parse_file(self):
+        scope, ids = skip_module.parse_line("/* sanity-skip-file: no-debug-print */")
+        self.assertEqual(scope, "file")
+        self.assertEqual(ids, frozenset({"no-debug-print"}))
+
+    def test_skip_next_line_suppresses_comment_slop(self):
+        source = (
+            "// sanity-skip-next-line\n"
+            "// Increment the counter\n"
+            "counter += 1;\n"
+        )
+        self.assertEqual(scan(source), [])
+
+    def test_skip_same_line_suppresses_comment_slop(self):
+        source = "// Increment the counter  // sanity-skip\ncounter += 1;\n"
+        self.assertEqual(scan(source), [])
+
+    def test_skip_file_comments(self):
+        source = (
+            "// sanity-skip-file: comments\n"
+            "// Increment the counter\n"
+            "counter += 1;\n"
+        )
+        self.assertEqual(scan(source), [])
+
+    def test_skip_does_not_silence_unrelated_lines(self):
+        source = (
+            "// sanity-skip-next-line\n"
+            "const a = 1;\n"
+            "// Increment the counter\n"
+            "counter += 1;\n"
+        )
+        self.assertTrue(scan(source))
+
+    def test_rule_skip_next_line(self):
+        ruleset = rules.RuleSet([
+            rules.parse(
+                "# x\n\n```sanity\n%s\n```\n"
+                % json.dumps({"deny": "console\\.log", "id": "no-console"}),
+                "r.md", "no-console",
+            )[0]
+        ])
+        lines = [
+            "// sanity-skip-next-line: no-console",
+            'console.log(1);',
+        ]
+        self.assertEqual(ruleset.scan("a.ts", lines), [])
+
+    def test_rule_skip_named_only(self):
+        no_console, _ = rules.parse(
+            "# a\n\n```sanity\n%s\n```\n"
+            % json.dumps({"deny": "console\\.log", "id": "no-console"}),
+            "a.md", "no-console",
+        )
+        no_eval, _ = rules.parse(
+            "# b\n\n```sanity\n%s\n```\n"
+            % json.dumps({"deny": "\\beval\\(", "id": "no-eval"}),
+            "b.md", "no-eval",
+        )
+        ruleset = rules.RuleSet([no_console, no_eval])
+        lines = ['console.log(1); // sanity-skip: no-console', "eval(1);"]
+        found = ruleset.scan("a.ts", lines)
+        self.assertEqual(len(found), 1)
+        self.assertIn("no-eval", found[0][2])
+
+    def test_pr_body_skip(self):
+        rule, _ = rules.parse(
+            "# a\n\n```sanity\n%s\n```\n" % json.dumps({
+                "surface": "pull_request",
+                "deny": "Generated with",
+                "id": "no-robots",
+            }),
+            "a.md", "no-robots",
+        )
+        ruleset = rules.RuleSet([rule])
+        body = "Generated with Claude\n<!-- sanity-skip: no-robots -->\n"
+        # skip-file style in HTML comment on another line — use file skip
+        body = "<!-- sanity-skip-file: no-robots -->\nGenerated with Claude\n"
+        self.assertEqual(ruleset.check_text(body), [])
 
 
 PATCH = """*** Begin Patch

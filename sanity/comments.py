@@ -4,7 +4,7 @@ import difflib
 import os
 import re
 
-from . import config as config_module
+from . import config as config_module, skip as skip_module
 
 LINE_TOKEN = {
     ".ts": "//", ".tsx": "//", ".js": "//", ".jsx": "//", ".mjs": "//",
@@ -23,7 +23,8 @@ ALLOW_PREFIX = re.compile(
     r"ref\b|source\b|context\b|@|!|-\*-|copyright|spdx|licen[sc]e|"
     r"eslint|ts-|tslint|prettier|biome|oxlint|istanbul|c8 |v8 |"
     r"noqa|type:|pylint|mypy|flake8|ruff|fmt:|go:|nolint|nosec|"
-    r"deno-|jshint|globals\b|region\b|endregion\b)",
+    r"deno-|jshint|globals\b|region\b|endregion\b|"
+    r"sanity-skip)",
     re.I,
 )
 
@@ -296,9 +297,17 @@ class CommentChecker:
         if added is None:
             added = set(range(len(lines)))
 
+        skips = skip_module.collect(lines)
+        if skips.covers("comments"):
+            return []
+
         violations = []
         in_block = False
         block_is_doc = False
+
+        def maybe_add(index, stripped, reason):
+            if reason and not skips.covers("comments", index):
+                violations.append((index + 1, stripped, reason))
 
         for index, raw in enumerate(lines):
             stripped = raw.strip()
@@ -311,8 +320,7 @@ class CommentChecker:
                             "",
                             self._next_code(lines, index, token),
                         )
-                        if reason:
-                            violations.append((index + 1, stripped, reason))
+                        maybe_add(index, stripped, reason)
                     if "*/" in stripped:
                         in_block = False
                     continue
@@ -326,8 +334,7 @@ class CommentChecker:
                             "",
                             self._next_code(lines, index, token),
                         )
-                        if reason:
-                            violations.append((index + 1, stripped, reason))
+                        maybe_add(index, stripped, reason)
                     continue
 
             if index not in added:
@@ -341,8 +348,7 @@ class CommentChecker:
             reason = self.classify(
                 text, code_before, self._next_code(lines, index, token)
             )
-            if reason:
-                violations.append((index + 1, stripped, reason))
+            maybe_add(index, stripped, reason)
 
         return violations
 

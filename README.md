@@ -230,6 +230,41 @@ sanity judge --pr --body-file pr.md
 
 ---
 
+## Skipping false positives
+
+Put a directive in a normal comment (any supported language):
+
+```ts
+// sanity-skip-next-line
+console.log("intentional probe");
+
+counter += 1; // sanity-skip: comments
+
+// sanity-skip-file: no-debug-print
+```
+
+```python
+print("x")  # sanity-skip: no-debug-print
+```
+
+```markdown
+<!-- sanity-skip-file: no-ai-attribution -->
+```
+
+| Directive | Effect |
+| --- | --- |
+| `sanity-skip` | This line, every check |
+| `sanity-skip: id[,id…]` | This line, named rule(s) only |
+| `sanity-skip-next-line` | Next line (same) |
+| `sanity-skip-next-line: id` | Next line, named rule(s) |
+| `sanity-skip-file` | Whole file, every check |
+| `sanity-skip-file: id` | Whole file, named rule(s) |
+
+The built-in filler-comment check is named `comments`. Prefer a named skip
+over a file-wide one so the rest of the file stays guarded.
+
+---
+
 ## Configuration
 
 `sanity.example.json` lists every key. Resolution order (later wins):
