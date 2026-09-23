@@ -349,8 +349,7 @@ class CommentChecker:
 
 def report(path, violations):
     lines = [
-        "%s: %d comment(s) carrying no information the code does not "
-        "already give." % (path, len(violations)),
+        "sanity blocked this edit — AI slop in comments (%d):" % len(violations),
         "",
     ]
     for lineno, text, reason in violations:
@@ -358,10 +357,12 @@ def report(path, violations):
         lines.append("      -> %s" % reason)
     lines += [
         "",
-        "Remove them. Keep a comment only if it is:",
+        "Rewrite the change without those comments, then retry the edit.",
+        "Keep a comment only if it is:",
         "  - a WHY: note explaining reasoning the reader cannot infer",
         "  - TODO / FIXME",
         "  - a doc comment (/** */, ///, docstring) on public API",
         "  - a directive (eslint-, ts-, noqa, type:, go:) or a license header",
+        "Do not narrate the edit. Do not restate the next line. Do not add banners.",
     ]
     return "\n".join(lines)

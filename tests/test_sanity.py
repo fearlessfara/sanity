@@ -1091,8 +1091,9 @@ class InitCommand(unittest.TestCase):
                                      if n.endswith(".md")]), 3)
         with open(os.path.join(self.root, ".pre-commit-config.yaml")) as handle:
             body = handle.read()
-        self.assertIn("sanity comments", body)
-        self.assertIn("sanity judge --commit", body)
+        self.assertIn("fearlessfara/sanity", body)
+        self.assertIn("sanity-comments", body)
+        self.assertIn("sanity-rules", body)
 
     def test_init_does_not_overwrite_existing_rules(self):
         os.makedirs(os.path.join(self.root, ".sanity", "rules"))

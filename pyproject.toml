@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sanity-hooks"
-version = "0.4.0"
+version = "0.4.1"
 description = "Stop AI slop: enforce repo rules on Claude, Cursor, and Codex via hooks, pre-commit, and CI."
 readme = "README.md"
 license = { text = "MIT" }

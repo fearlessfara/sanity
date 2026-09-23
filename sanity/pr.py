@@ -312,8 +312,11 @@ class PRChecker:
                 "Rewrite the description against the template, then retry. "
                 "Every section must be present and actually filled in — "
                 "delete the guidance comments rather than leaving them in "
-                "place.",
+                "place. Do not use --fill. Do not leave placeholders.",
             ]
         else:
-            lines += ["", "Fix the description, then retry."]
+            lines += [
+                "",
+                "Rewrite the description to satisfy the rule, then retry.",
+            ]
         return "\n".join(lines)

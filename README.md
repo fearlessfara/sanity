@@ -58,7 +58,7 @@ pre-commit install --hook-type commit-msg
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/fearlessfara/sanity
-    rev: v0.4.0   # pin a tag
+    rev: v0.4.1   # pin a tag
     hooks:
       - id: sanity-comments
       - id: sanity-rules

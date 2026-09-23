@@ -227,11 +227,22 @@ class RuleSet:
 
 
 def report(path, violations):
-    lines = ["%s: %d rule violation(s)." % (path, len(violations)), ""]
+    blocking = any(severity == "block" for *_, severity in violations)
+    headline = (
+        "sanity blocked this edit — rule violation(s) (%d):"
+        if blocking else
+        "sanity warning — rule violation(s) (%d):"
+    ) % len(violations)
+    lines = [headline, ""]
     for lineno, text, reason, severity in violations:
         label = "%s:%d" % (path, lineno)
         lines.append("  %-28s %s" % (label, text[:60]))
         lines.append("      -> %s%s" % (
             reason, "" if severity == "block" else " [%s]" % severity
         ))
+    lines += [
+        "",
+        "Fix the violation, then retry the edit. Do not rephrase the same "
+        "break to dodge the check.",
+    ]
     return "\n".join(lines)

@@ -24,11 +24,12 @@ BEGIN = "<!-- sanity:begin -->"
 END = "<!-- sanity:end -->"
 
 PREAMBLE = (
-    "The rules below are enforced mechanically by `sanity`, which runs as a "
-    "hook on file edits and pull requests. A violation cancels the tool call "
-    "and hands back the reason, so following them up front is faster than "
-    "being corrected. Do not edit this section by hand — it is generated "
-    "from `.sanity/`, and `sanity sync` will overwrite it."
+    "These rules are enforced by `sanity`. A violation cancels the tool call "
+    "(or fails the commit) and hands the reason back — so follow them on the "
+    "first try. Do not invent filler comments, narrate edits, skip the PR "
+    "template, or ignore a rule below because it is inconvenient. Do not "
+    "edit this section by hand; it is generated from `.sanity/` and "
+    "`sanity sync` will overwrite it."
 )
 
 MDC_HEADER = (

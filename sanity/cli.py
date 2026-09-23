@@ -131,56 +131,6 @@ def cmd_rules(args):
     return status
 
 
-def _severity(section_mode, rule_severity):
-    """A section set to warn or off caps every rule underneath it."""
-    if section_mode == "off" or rule_severity == "off":
-        return "off"
-    if section_mode == "warn":
-        return "warn"
-    return rule_severity
-
-
-def _rule_violations(ruleset, section_mode, path, lines, added):
-    graded = [
-        (lineno, text, reason, _severity(section_mode, severity))
-        for lineno, text, reason, severity in ruleset.scan(path, lines, added)
-    ]
-    return [entry for entry in graded if entry[3] != "off"]
-
-
-def cmd_rules(args):
-    config, _ = _load()
-    section_mode = (config.get("rules", {}).get("mode") or "block").lower()
-    ruleset = _ruleset()
-    status = _warn_about(ruleset.errors, args.strict)
-    if not ruleset or section_mode == "off":
-        return status
-
-    paths = args.files or (gitinfo.staged_files() if gitinfo.in_repo() else [])
-    for path in paths:
-        if not os.path.isfile(path):
-            continue
-        try:
-            with open(path, encoding="utf-8", errors="replace") as handle:
-                lines = handle.read().splitlines()
-        except OSError:
-            continue
-
-        if args.whole_file:
-            added = None
-        else:
-            head = gitinfo.head_content(path)
-            added = comments_module.added_indices(head, lines) if head else None
-
-        found = _rule_violations(ruleset, section_mode, path, lines, added)
-        if found:
-            print(rules_module.report(path, found))
-            print()
-            if any(entry[3] == "block" for entry in found):
-                status = 1
-    return status
-
-
 def _pr_inputs(args):
     if args.github_event:
         try:
@@ -431,21 +381,27 @@ def _hook_pr(payload, config, start, agent):
 
 
 GIT_HOOK = """#!/usr/bin/env bash
-# Installed by `sanity install-git-hook`. Runs the comment check on staged
-# files. Skip once with:  SANITY_MODE=off git commit ...
+# Installed by `sanity install-git-hook`. Blocks filler comments and
+# .sanity/rules breaks on staged files.
+# Skip once with:  SANITY_MODE=off git commit ...
 set -uo pipefail
 
 files=$(git diff --cached --name-only --diff-filter=ACMR)
 [ -z "$files" ] && exit 0
 
-if command -v sanity >/dev/null 2>&1; then
-  # shellcheck disable=SC2086
-  exec sanity comments $files
-fi
+run() {{
+  if command -v sanity >/dev/null 2>&1; then
+    # shellcheck disable=SC2086
+    sanity "$@" $files
+  else
+    export PYTHONPATH="{home}${{PYTHONPATH:+:$PYTHONPATH}}"
+    # shellcheck disable=SC2086
+    {python} -m sanity "$@" $files
+  fi
+}}
 
-export PYTHONPATH="{home}${{PYTHONPATH:+:$PYTHONPATH}}"
-# shellcheck disable=SC2086
-exec {python} -m sanity comments $files
+run comments || exit $?
+run rules || exit $?
 """
 
 
@@ -487,9 +443,11 @@ sys.exit(main(["hook", {kind!r}, "--agent", {agent!r}]))
 
 def _shim(directory, kind, agent, home):
     os.makedirs(directory, exist_ok=True)
+    # comments shim runs the full edit gate (comments + rules)
+    hook_kind = "files" if kind == "comments" else kind
     path = os.path.join(directory, "sanity-%s.py" % kind)
     with open(path, "w", encoding="utf-8") as handle:
-        handle.write(AGENT_SHIM.format(home=home, kind=kind, agent=agent))
+        handle.write(AGENT_SHIM.format(home=home, kind=hook_kind, agent=agent))
     os.chmod(path, 0o755)
     return path
 
@@ -662,11 +620,12 @@ def cmd_init(args):
 
     print()
     print("Next:")
-    print("  1. pre-commit install          # if you use the pre-commit framework")
-    print("  2. Edit .sanity/rules/         # then: sanity sync")
-    print("  3. Optional AI judge: set judge.enabled=true in .sanity/config.json")
-    print("     (provider=api + OPENAI_API_KEY for commit-time checks)")
-    print("  4. Claude Code: install the sanity plugin from your marketplace")
+    print("  1. pre-commit install")
+    print("  2. Commit .sanity/, hooks, and the synced instruction files")
+    print("  3. Raise starter rules from warn → block when the team is ready")
+    print("  4. Optional AI judge: judge.enabled=true + provider=api + API key")
+    print("  5. Claude Code: /plugin marketplace add fearlessfara/sanity")
+    print("                 /plugin install sanity@sanity")
     return 0
 
 

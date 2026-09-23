@@ -1,7 +1,7 @@
 {
   "name": "sanity",
   "description": "Stop AI slop. Cancels filler comments, off-template PRs, and custom rule breaks so the agent has to fix them.",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "author": {
     "name": "Christian Faraone"
   },

@@ -2,7 +2,7 @@
 # Pin `rev` to a release tag: https://github.com/fearlessfara/sanity/releases
 repos:
   - repo: https://github.com/fearlessfara/sanity
-    rev: v0.4.0
+    rev: v0.4.1
     hooks:
       - id: sanity-comments
       - id: sanity-rules
