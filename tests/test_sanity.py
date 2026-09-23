@@ -195,6 +195,56 @@ class JudgeEngine(unittest.TestCase):
         self.assertIn("drive-by", report)
         self.assertFalse(results[0][1])
 
+    def test_missing_key_fails_open_even_with_a_cached_block(self):
+        rule, _ = rules.parse(
+            rule_file({"check": "judge", "severity": "block"}),
+            "r.md", "scope",
+        )
+        ruleset = rules.RuleSet([rule], root=self.root)
+        config = {
+            "judge": {
+                "provider": "api",
+                "api": {"api_key_env": "SANITY_TEST_KEY", "timeout": 1},
+            },
+        }
+        diff = "diff --git a/x b/x\n+rename everything\n"
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return json.dumps({
+                    "choices": [{"message": {
+                        "content": '{"pass": false, "reason": "drive-by"}'
+                    }}]
+                }).encode("utf-8")
+
+        os.environ["SANITY_TEST_KEY"] = "sk-test"
+        original = judge_module.urllib.request.urlopen
+        judge_module.urllib.request.urlopen = lambda *a, **k: FakeResponse()
+        try:
+            _results, _report, blocking = judge_module.evaluate_rules(
+                config, ruleset, surface="change", root=self.root, diff=diff,
+            )
+        finally:
+            judge_module.urllib.request.urlopen = original
+        self.assertTrue(blocking)  # sanity check: the block really got cached
+
+        # The key disappears. The cached block must not be replayed —
+        # fail open, same as a run that never had a key.
+        os.environ.pop("SANITY_TEST_KEY", None)
+        results, report, blocking = judge_module.evaluate_rules(
+            config, ruleset, surface="change", root=self.root, diff=diff,
+        )
+        self.assertFalse(blocking)
+        self.assertTrue(results[0][1])
+        self.assertEqual(results[0][3], "error")
+        self.assertIn("no API key", report)
+
     def test_auto_prefers_api_with_key(self):
         os.environ["OPENAI_API_KEY"] = "sk-test"
         try:
@@ -277,6 +327,32 @@ class CLI(unittest.TestCase):
         self.assertTrue(os.path.exists(
             os.path.join(self.root, ".sanity", "rules", "smallest-change.md")
         ))
+
+    def test_init_ignores_the_judge_cache(self):
+        result = self.run_cli(["init", "--skip-hooks", "--skip-sync"])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with open(os.path.join(self.root, ".gitignore")) as handle:
+            body = handle.read()
+        self.assertIn(".sanity/cache/", body)
+
+    def test_init_appends_to_an_existing_gitignore(self):
+        path = os.path.join(self.root, ".gitignore")
+        with open(path, "w") as handle:
+            handle.write("*.pyc")  # no trailing newline, on purpose
+        result = self.run_cli(["init", "--skip-hooks", "--skip-sync"])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with open(path) as handle:
+            body = handle.read()
+        self.assertIn("*.pyc", body)
+        self.assertIn(".sanity/cache/", body)
+
+    def test_init_gitignore_is_idempotent(self):
+        self.run_cli(["init", "--skip-hooks", "--skip-sync"])
+        result = self.run_cli(["init", "--skip-hooks", "--skip-sync"])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with open(os.path.join(self.root, ".gitignore")) as handle:
+            body = handle.read()
+        self.assertEqual(body.count(".sanity/cache/"), 1)
 
     def test_stop_hook_session_followup(self):
         self.write_rule()

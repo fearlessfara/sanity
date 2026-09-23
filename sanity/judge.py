@@ -314,6 +314,9 @@ def evaluate(config, kind, root=None, message=None, title=None, body=None,
         )
         cache_key = "pr\0%s\0%s\0%s" % (title or "", body or "", diff)
 
+    if not _api_key_present(opts["api"]):
+        return True, _no_key_message(opts["api"]), "error"
+
     cached = _cache_get(root, cache_key, opts["cache"])
     if cached is not None:
         passed, reason = cached
@@ -347,6 +350,10 @@ def _select_rules(ruleset, surface):
 def _api_key_present(api):
     key_env = (api or {}).get("api_key_env") or "OPENAI_API_KEY"
     return bool(os.environ.get(key_env) or (api or {}).get("api_key"))
+
+
+def _no_key_message(api):
+    return "no API key in $%s" % ((api or {}).get("api_key_env") or "OPENAI_API_KEY")
 
 
 def resolve_rules_provider(config, for_agent=False):
@@ -405,37 +412,44 @@ def evaluate_rules(config, ruleset, surface="change", root=None,
         # Session cannot hard-fail; the agent is told to self-review once.
         return results, advice, False
 
+    # A missing key must fail open right now, not replay a verdict an
+    # earlier run cached back when a key was configured.
+    key_present = _api_key_present(opts["api"])
+
     results = []
     blocking = False
     for rule in selected:
         cache_key = "rule\0%s\0%s\0%s" % (
             rule.id, rule.grading_criterion(), context
         )
-        cached = _cache_get(root, cache_key, opts["cache"])
-        if cached is not None:
-            passed, reason = cached
-            channel = "ok"
+        if not key_present:
+            passed, reason, channel = True, _no_key_message(opts["api"]), "error"
         else:
-            prompt = RULE_PROMPT.format(
-                rule_id=rule.id,
-                criterion=rule.grading_criterion(),
-                context=context,
-            )
-            text, error = _api_chat(opts["api"], prompt)
-            if error:
-                passed, reason, channel = True, error, "error"
+            cached = _cache_get(root, cache_key, opts["cache"])
+            if cached is not None:
+                passed, reason = cached
+                channel = "ok"
             else:
-                parsed = _parse_verdict(text)
-                if parsed is None:
-                    passed, reason, channel = (
-                        True, "unparseable judge reply", "error"
-                    )
+                prompt = RULE_PROMPT.format(
+                    rule_id=rule.id,
+                    criterion=rule.grading_criterion(),
+                    context=context,
+                )
+                text, error = _api_chat(opts["api"], prompt)
+                if error:
+                    passed, reason, channel = True, error, "error"
                 else:
-                    passed, reason = parsed
-                    channel = "ok"
-                    _cache_put(
-                        root, cache_key, passed, reason, opts["cache"]
-                    )
+                    parsed = _parse_verdict(text)
+                    if parsed is None:
+                        passed, reason, channel = (
+                            True, "unparseable judge reply", "error"
+                        )
+                    else:
+                        passed, reason = parsed
+                        channel = "ok"
+                        _cache_put(
+                            root, cache_key, passed, reason, opts["cache"]
+                        )
 
         results.append((rule, passed, reason, channel))
         if not passed and channel == "ok" and rule.severity == "block":
