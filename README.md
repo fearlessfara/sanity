@@ -234,6 +234,20 @@ sanity hook stop|pr             agent hook entry (JSON on stdin)
 
 ---
 
+## Repository layout
+
+| Path | What it is |
+| --- | --- |
+| `sanity/` | The Python package and the CLI |
+| `sanity/starters/` | Files `sanity init` copies into a repo |
+| `hooks/` | Claude Code plugin hooks (`${CLAUDE_PLUGIN_ROOT}`) |
+| `examples/` | Pre-commit snippet, GitHub Actions workflow, sample rule |
+| `tests/` | `unittest` suite |
+| `.sanity/rules/` | Rules for this repository |
+
+`CLAUDE.md`, `AGENTS.md`, and `.cursor/rules/sanity.mdc` are generated.
+Edit `.sanity/rules/` and run `sanity sync`.
+
 ## Development
 
 ```bash
