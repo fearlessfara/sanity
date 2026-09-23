@@ -257,6 +257,8 @@ pip install -e .
 python3 -m unittest discover -s tests
 ```
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+
 ---
 
 ## Caution
