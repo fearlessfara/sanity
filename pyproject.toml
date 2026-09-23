@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "sanity-hooks"
 version = "0.4.0"
-description = "Deterministic guardrails for AI-assisted work: rules, agent hooks, pre-commit, optional AI judge."
+description = "Stop AI slop: enforce repo rules on Claude, Cursor, and Codex via hooks, pre-commit, and CI."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.8"
 authors = [{ name = "Christian Faraone" }]
-keywords = ["pre-commit", "hooks", "ai", "lint", "pull-request"]
+keywords = ["pre-commit", "hooks", "ai", "slop", "lint", "pull-request"]
 classifiers = [
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",

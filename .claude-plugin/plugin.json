@@ -1,6 +1,6 @@
 {
   "name": "sanity",
-  "description": "Deterministic guardrails for AI-assisted work: filler comments, PR templates, custom rules, optional AI judge.",
+  "description": "Stop AI slop. Cancels filler comments, off-template PRs, and custom rule breaks so the agent has to fix them.",
   "version": "0.4.0",
   "author": {
     "name": "Christian Faraone"
@@ -8,6 +8,6 @@
   "homepage": "https://github.com/fearlessfara/sanity",
   "repository": "https://github.com/fearlessfara/sanity",
   "license": "MIT",
-  "keywords": ["hooks", "pre-commit", "ai", "lint", "pull-request"],
+  "keywords": ["hooks", "pre-commit", "ai", "slop", "lint", "pull-request"],
   "hooks": "./hooks/hooks.json"
 }

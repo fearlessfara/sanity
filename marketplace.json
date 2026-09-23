@@ -5,7 +5,7 @@
     {
       "name": "sanity",
       "source": "./",
-      "description": "Deterministic guardrails for AI-assisted work: filler comments, PR templates, custom rules, optional AI judge."
+      "description": "Stop AI slop. Cancels filler comments, off-template PRs, and custom rule breaks so the agent has to fix them."
     }
   ]
 }

@@ -1,14 +1,19 @@
 # sanity
 
-**Write rules once. Make every AI agent follow them.**
+**Stop AI slop. Force the agent to follow your rules.**
 
-Sanity is deterministic guardrails for AI-assisted work. You define rules in
-`.sanity/`; sanity enforces them in Claude Code, Cursor, and Codex hooks, in
-pre-commit, and in CI — and can optionally ask a model whether a commit or PR
+Models will narrate the edit, invent filler comments, skip your PR template,
+and ignore `CLAUDE.md` when it is inconvenient. Sanity exists to whip that
+behaviour back into line.
+
+You write rules once in `.sanity/`. Sanity enforces them mechanically in
+Claude Code, Cursor, and Codex (deny the tool call), in pre-commit (block the
+commit), and in CI — and can optionally ask a model whether a commit or PR
 actually matches the diff.
 
-Instructions in `CLAUDE.md` are persuasion. Sanity is mechanical: the tool
-call is cancelled, or the commit fails, and the reason is handed back.
+`CLAUDE.md` / `AGENTS.md` / `.cursor/rules` are persuasion. Sanity is not:
+the edit is cancelled, or the commit fails, and the reason is handed back so
+the agent has to fix it.
 
 | Check | What it rejects |
 | --- | --- |
@@ -106,17 +111,17 @@ app repo, or:
 ## How it fits together
 
 ```
-.sanity/rules/*.md     ← write once (prose + check)
+.sanity/rules/*.md     ← your rules (prose for the model + a mechanical check)
         │
-        ├─ sanity sync      → CLAUDE.md / AGENTS.md / .cursor/rules
-        ├─ agent hooks      → deny the tool call (fastest feedback)
-        ├─ pre-commit       → block the commit
+        ├─ sanity sync      → stuff them into CLAUDE.md / AGENTS.md / .cursor
+        ├─ agent hooks      → deny the sloppy tool call mid-turn
+        ├─ pre-commit       → block the commit if it still slipped through
         └─ CI + optional judge → unskippable backstop
 ```
 
-Use more than one layer. Agent hooks are the only place the model can fix
-itself; pre-commit catches any editor; CI is what a human cannot `--no-verify`
-away.
+The agent hook is the whip that matters most: the model gets the refusal in
+the same turn and has to rewrite. Pre-commit catches humans and any editor.
+CI is what `--no-verify` cannot dodge.
 
 ---
 
